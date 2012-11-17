@@ -90,28 +90,58 @@ namespace obdwpf {
         
         if (!atiOutput.Contains("ELM")) {
           goodConnection = false; connected = true;
-          linefeed = true;
-          errorMessage = "Error on Linefeed";
+          //linefeed = true;
+          errorMessage = "Error on ATI";
           }
         //AT@1
-        //AT@2
-        //ATRV
-        //ATSP 3
-        //0100 - BUS INIT
-        //ATH1
-        //0100
-        //0120
+        var at1Output = SendAtCommand("AT@1");
 
-        if (!SetEcho(false)) {
-          goodConnection = false;
-          echo = false;
-          errorMessage = "Error on Echo";
+        if (!at1Output.Contains("OBDII to RS232 Interpreter")) {
+          goodConnection = false; connected = true;
+          //linefeed = true;
+          errorMessage = "Error on AT@1";
         }
+        //AT@2
+        var at2Output = SendAtCommand("AT@2");
+
+        if (!at2Output.Contains("SCANTOOL.NET")) {
+          goodConnection = false; connected = true;
+          //linefeed = true;
+          errorMessage = "Error on AT@2";
+        }
+        //ATRV
+        var atrvOutput = SendVoltageRequest();
+        if (!atrvOutput.Contains("V")) {
+          goodConnection = false; connected = true;
+          //linefeed = true;
+          errorMessage = "Error on ATRV";
+        }
+        //ATSP 3
+        var atspOutput = SendAtCommand("ATSP 3");
+
+        if (!atspOutput.Contains("OK")) {
+          goodConnection = false; connected = true;
+          //linefeed = true;
+          errorMessage = "Error on ATSP 3";
+        }
+        //0100 - BUS INIT
+        var busInitOutput = SendElmRequest("01 00");
+        if (!busInitOutput.Contains("BUS INIT")) {
+          goodConnection = false; connected = true;
+          //linefeed = true;
+          errorMessage = "Error on BUS INIT";
+        }
+        //ATH1
         if (!SetHeader(false)) {
           goodConnection = false;
           headers = false;
           errorMessage = "Error on Header";
         }
+        //0100
+        //0120
+
+
+
         
         if (!goodConnection) {
           connected = false;
