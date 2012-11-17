@@ -331,7 +331,8 @@ namespace obdwpf {
     public double GetCoolantTemp() {
       var msg = SendElmRequest("0105");
       // temp: remove 41
-      msg = msg.Substring(6);
+      msg = msg.Substring(5).Replace("\r", "").Replace(">", "").Trim();
+      System.Diagnostics.Debug.WriteLine(string.Format("Coolant Temp: {0}", msg));
       byte[] bytes = HexStringToBytes(msg);
 
       double temp = 0;

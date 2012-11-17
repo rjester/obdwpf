@@ -29,12 +29,12 @@ namespace obdwpf {
       InitializeComponent();
 
       base.DataContext = vm;
-      device = new TestDevice();
-      //device = new ObdDevice();
+      //device = new TestDevice();
+      device = new ObdDevice();
       Task.Factory.StartNew(() => {
         while (true) {
           if (device.Connected) {
-            recInterfaceConnectionStatus.Fill = new SolidColorBrush(Colors.Green);
+            //recInterfaceConnectionStatus.Fill = new SolidColorBrush(Colors.Green);
             vm.State = device.Poll();
 
             Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
