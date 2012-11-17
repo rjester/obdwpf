@@ -16,6 +16,9 @@ namespace obdwpf {
     string errorMessage;
     PollState state;
     private bool connected = false;
+    private bool headers = false;
+    private bool echo = false;
+    private bool linefeed = false;
 
     public event obdResponseEventHandler obdResponse;
 
@@ -41,20 +44,19 @@ namespace obdwpf {
 
     public PollState Poll()
     {
-      //while (true)
-      //{
-        state.Voltage = Convert.ToDouble(SendVoltageRequest());
-        state.Mph = Convert.ToInt32(SendElmRequest("010D"));
-        state.Rpm = Convert.ToInt32(SendElmRequest("010C"));
-        //Thread.Sleep(1000);
+        var voltage = SendVoltageRequest();
+        state.Voltage = Convert.ToDouble(voltage.Substring(0, voltage.Length - 4));
+        //state.Mph = GetMilesPerHour();
+        //state.Rpm = GetRpm();
+        state.CoolantTemp = GetCoolantTemp();
         return state;
-      //}
     }
 
     public bool Connect(string portName, int baudRate)
     {
       bool goodConnection = true;
       port = new SerialPort(portName, baudRate);
+      port.ReadTimeout = 1000;
       try {
         port.Open();
       }
@@ -70,19 +72,47 @@ namespace obdwpf {
         if (!Reset()) {
           goodConnection = false;
           errorMessage = "Error on Reset";
-        }
-        if (!SetLineFeed(false)) {
-          goodConnection = false;
-          errorMessage = "Error on Linefeed";
-        }
-        if (!SetHeader(false)) {
-          goodConnection = false;
-          errorMessage = "Error on Header";
+          System.Diagnostics.Debug.WriteLine(errorMessage);
         }
         if (!SetEcho(false)) {
           goodConnection = false;
+          echo = false;
           errorMessage = "Error on Echo";
         }
+        if (!SetLineFeed(false)) {
+          goodConnection = false; connected = true;
+          linefeed = true;
+          errorMessage = "Error on Linefeed";
+        }
+        //STI
+        //ATI
+        var atiOutput = SendAtCommand("ATI");
+        
+        if (!atiOutput.Contains("ELM")) {
+          goodConnection = false; connected = true;
+          linefeed = true;
+          errorMessage = "Error on Linefeed";
+          }
+        //AT@1
+        //AT@2
+        //ATRV
+        //ATSP 3
+        //0100 - BUS INIT
+        //ATH1
+        //0100
+        //0120
+
+        if (!SetEcho(false)) {
+          goodConnection = false;
+          echo = false;
+          errorMessage = "Error on Echo";
+        }
+        if (!SetHeader(false)) {
+          goodConnection = false;
+          headers = false;
+          errorMessage = "Error on Header";
+        }
+        
         if (!goodConnection) {
           connected = false;
           port.Close();
@@ -90,7 +120,7 @@ namespace obdwpf {
         else {
           port.DiscardInBuffer();
           port.DiscardOutBuffer();
-          processThread.Start();
+          //processThread.Start();
         }
       }
       return goodConnection;
@@ -102,6 +132,7 @@ namespace obdwpf {
       {
         port.Close();
       }
+      connected = false;
     }
 
     private bool SetLineFeed(bool linefeedState) {
@@ -179,6 +210,7 @@ namespace obdwpf {
     private bool Reset() {
       port.DiscardOutBuffer();
       port.DiscardInBuffer();
+      System.Diagnostics.Debug.WriteLine("Sending ATZ");
       port.Write("ATZ\r");
 
       bool continueReading = true;
@@ -192,6 +224,7 @@ namespace obdwpf {
         if (returnVal.Contains('>'))
           continueReading = false;
       }
+      System.Diagnostics.Debug.WriteLine("Received: {0}", returnVal);
       if (returnVal.Contains("ELM"))
         return true;
       else
@@ -202,7 +235,7 @@ namespace obdwpf {
     {
       port.DiscardOutBuffer();
       port.DiscardInBuffer();
-      port.Write("ATRV" + 0x0D);
+      port.Write("ATRV\r");
       bool continueReading = true;
       string returnVal = string.Empty;
       while (continueReading) {
@@ -214,6 +247,24 @@ namespace obdwpf {
         if (returnVal.Contains('>'))
           continueReading = false;
       }
+      return returnVal;
+    }
+
+    public string SendAtCommand(string command) {
+      System.Diagnostics.Debug.WriteLine(string.Format("Sending {0}", command));
+      port.Write(command + "\r");
+      bool continueReading = true;
+      string returnVal = string.Empty;
+      while (continueReading) {
+        //count = port.Read(commandBuffer, 0, 1024);
+        count = port.BytesToRead;
+        commandBuffer = new byte[count];
+        port.Read(commandBuffer, 0, count);
+        returnVal += System.Text.Encoding.Default.GetString(commandBuffer, 0, count);
+        if (returnVal.Contains('>'))
+          continueReading = false;
+      }
+      System.Diagnostics.Debug.WriteLine(string.Format("Received {0}", returnVal));
       return returnVal;
     }
 
@@ -232,6 +283,64 @@ namespace obdwpf {
           continueReading = false;
       }
       return returnVal;
+    }
+
+    public double GetFuelSystemStatus() {
+      var msg = SendElmRequest("0103");
+      // temp: remove 41
+      msg = msg.Substring(6);
+      byte[] bytes = HexStringToBytes(msg);
+
+      double temp = 0;
+      for (int i = 0; i < bytes.Length - 1; i++) {
+        temp += Convert.ToDouble(bytes[i]);
+      }
+      return ((9.0 / 5.0) * (temp - 40)) + 32;
+    }
+
+    public double GetCoolantTemp() {
+      var msg = SendElmRequest("0105");
+      // temp: remove 41
+      msg = msg.Substring(6);
+      byte[] bytes = HexStringToBytes(msg);
+
+      double temp = 0;
+      for (int i = 0; i < bytes.Length - 1; i++) {
+        temp += Convert.ToDouble(bytes[i]);
+      }
+      return ((9.0 / 5.0) * (temp - 40)) + 32;
+    }
+
+    public double GetMilesPerHour() {
+      var msg = SendElmRequest("010D");
+      double result = 0;
+      if (msg.Contains("41") && msg.Contains("0D")) {
+        byte[] bytes = HexStringToBytes(msg.Substring(6));
+        result = bytes[0] * 0.621371;
+      }
+
+      return result;
+    }
+
+    public double GetRpm() {
+      var msg = SendElmRequest("010C");
+      // temp: remove 41
+      msg = msg.Substring(6);
+
+      byte[] bytes = HexStringToBytes(msg);
+
+      var rpm = ((bytes[0] * 256) + bytes[1]) / 4;
+      return rpm;
+    }
+
+    private byte[] HexStringToBytes(string hex) {
+      byte[] data = new byte[hex.Length / 2];
+      int j = 0;
+      for (int i = 0; i < hex.Length; i += 3) {
+        data[j] = Convert.ToByte(hex.Substring(i, 2), 16);
+        ++j;
+      }
+      return data;
     }
   }
 }

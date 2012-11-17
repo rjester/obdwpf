@@ -8,6 +8,7 @@ namespace obdwpf
   public interface IObdDevice
   {
     bool Connected { get; set; }
+    
     PollState Poll();
 
     bool Connect(string portName, int baudRate);
@@ -17,5 +18,7 @@ namespace obdwpf
     string SendVoltageRequest();
 
     string SendElmRequest(string command);
+
+    double GetFuelSystemStatus();
   }
 }

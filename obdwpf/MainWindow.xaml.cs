@@ -34,6 +34,7 @@ namespace obdwpf {
       Task.Factory.StartNew(() => {
         while (true) {
           if (device.Connected) {
+            recInterfaceConnectionStatus.Fill = new SolidColorBrush(Colors.Green);
             vm.State = device.Poll();
 
             Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
@@ -49,7 +50,7 @@ namespace obdwpf {
             }));
 
           }
-          Thread.Sleep(500);
+          Thread.Sleep(10000);
         }
       });
 
